@@ -17,12 +17,17 @@ Usage:
   MAIMS.py -f <isotopologue_file> -m <model_file> [-n] [-v] [-s <random_seed>]
            [-c <HCS_max_missing_mass>] [-d <HCS_confidence_level>]
            [-i <min_num_iterations>] [-r <min_ROABM>]
+           [--rel <mz_precision_rel>] [--abs <mz_precision_abs>]
            [-o <optimization_method>]
   MAIMS.py (-h | --help)
   MAIMS.py --version
 
 Options:
   -h --help                   Output usage
+  --abs <mz_precision_abs>    Specify the absolute mass error in Da of the MS machine.
+                              This information is required when performing a natural
+                              abundance correction on the isotopologue profile.
+                              [default: 0.1] (low resolution)
   -c <HCS_max_missing_mass>   Set the maximum acceptable missing mass for the
                               high-confidence stopping rule (c parameter).
                               C can take floating point values in the interval: [0,1].
@@ -59,6 +64,10 @@ Options:
   -r <min_ROABM>              Set the minimum required region of attraction (ROA) (i.e. number of times found)
                               of the current best local minimum (BM).
                               [default: 20]
+  --rel <mz_precision_rel>    Specify the relative mass error in ppm of the MS machine.
+                              This information is required when performing a natural
+                              abundance correction on the isotopologue profile.
+                              [default: 500] (low resolution)
   -s <random_seed>            Define the random seed value for the random number generation
                               [default: 0]
   -v --verbose                Set when extensive output information is required
@@ -68,7 +77,7 @@ Options:
 
 from __future__ import print_function
 
-__version__ = '1.0.1'
+__version__ = '2.0.1'
 __author__ = "Dries verdegem"
 __copyright__ = "Copyright 2017, VIB-KU Leuven (http://www.vib.be/en, http://www.kuleuven.be/english), Dries Verdegem"
 __credits__ = ["Dries Verdegem", "Hunter NB Moseley", "Wesley Vermaelen",
@@ -81,6 +90,7 @@ __status__ = "Production"
 
 import sys, os
 import re
+import copy
 import math
 import itertools
 import time
@@ -114,6 +124,8 @@ def parseopts():
         min_ROABM                      : minimum region of attraction of best minimum (Int)
         HCS_max_missing_mass           : maximum missing mass for HCS rule (Float)
         HCS_confidence_level           : confidence level for HCS rule (Float)
+        mz_precision_rel               : MS relative mass error (Float)
+        mz_precision_abs               : MS relative mass error (Float)
         verbose                        : verbose flag (Bool)
     """
     
@@ -222,6 +234,33 @@ def parseopts():
         print(__doc__)
         sys.exit(2)
     
+    # parse the MS relative mass error
+    try:
+        mz_precision_rel = float(arguments['--rel'])
+    except:
+        print('')
+        print('Invalid argument for the MS relative mass error: %s' % arguments['--rel'])
+        print('Value should be floating point number')
+        print('Please check the --rel argument.')
+        print('')
+        print(__doc__)
+        sys.exit(2)
+    
+    # parse the MS relative mass error
+    try:
+        mz_precision_abs = float(arguments['--abs'])
+    except:
+        print('')
+        print('Invalid argument for the MS absolute mass error: %s' % arguments['--abs'])
+        print('Value should be floating point number')
+        print('Please check the --abs argument.')
+        print('')
+        print(__doc__)
+        sys.exit(2)
+    #mz_precision_rel               : MS relative mass error (Float)
+    #mz_precision_abs               : MS relative mass error (Float)
+    #tracer_isotope                 : tracer isotope (Str)
+    
     # parse the verbose argument
     verbose = arguments['--verbose']
 
@@ -237,6 +276,8 @@ def parseopts():
         print('- minimum region of attraction of best minimum: %s' % min_ROABM)
         print('- maximum missing mass for HCS rule: %s' % HCS_max_missing_mass)
         print('- confidence level for HCS rule: %s' % HCS_confidence_level)
+        print('- MS relative mass error: %s' % mz_precision_rel)
+        print('- MS absolute mass error: %s' % mz_precision_abs)
         print('')
 
     return (random_seed, isotopologue_file, model_file,
@@ -244,6 +285,7 @@ def parseopts():
             optimization_method,
             min_num_iterations, min_ROABM,
             HCS_max_missing_mass, HCS_confidence_level,
+            mz_precision_rel, mz_precision_abs,
             verbose)
 
 
@@ -309,14 +351,16 @@ def parse_model_data(model_fn):
     
     Returns:
         metabolite_name  : metabolite name (Str)
-        formula          : metabolite formula (Str)
+        compound_formula : metabolite compound formula (Str)
+        ion_formula      : metabolite ion formula (Str)
         moieties         : moiety information (Dict)
         constraints      : constraint information (List)
     """
     e = xml.etree.ElementTree.parse(model_fn).getroot()
 
     metabolite_name = e.get('name')
-    formula = e.get('formula')
+    compound_formula = e.get('compound_formula')
+    ion_formula = e.get('ion_formula')
     moieties = {}
     constraints = []
     
@@ -334,7 +378,7 @@ def parse_model_data(model_fn):
         for constraint in constraint_list:
             constraints.append(constraint.text)
     
-    return metabolite_name, formula, moieties, constraints
+    return metabolite_name, compound_formula, ion_formula, moieties, constraints
 
 
 def normalize_isotopologue_profile(isotopologue_profile):
@@ -746,55 +790,390 @@ class IsotopomerDistributionCorrector():
         return elemental_formula_parsed3
 
 
-    def Fernandez1996_correction(self, elemental_formula, isotopologue_profile):
+    def generate_m0mass_and_distribution(self,
+                                         molecular_formula_compound,
+                                         molecular_formula_ion,
+                                         isotope_focus=['C13']):
         """
-        Perform the Fernandez1996 correction.
+        Generate the isotopologue profile for the given elemental formula.
+        It makes sure the following peaks are provided:
+            - the most intense peaks (natural abundance based)
+            - the isotopologue peaks caused by the elements specified in `focus`
         
         Args:
-            elemental_formula - Required     : elemental formula (Str)
-            isotopologue_profile - Required  : isotopologue profile (List)
+            molecular_formula_compound - Required : the elemental formula of the original compound as a string
+            molecular_formula_ion      - Required : the elemental formula of the measured ion as a string
+            isotope_focus              - Optional : the list of isotopes of which the
+                                                    isotopologue peaks need to be included
+                                                    default is the C13 label.
+        
+        Returns:
+            mass_isotopologue_distribution : a list of tuples of five elements:
+                                             - mass
+                                             - natural abundance determined intensity
+                                             - formula
+                                             - formula in dictionary format
+                                             - focus element tag
+        """
+        
+        elements_compound = self.parse_formula(molecular_formula_compound)
+        elements_ion = self.parse_formula(molecular_formula_ion)
     
+        mass_isotopologue_distribution = [{'formula': '',
+                                           'formula_dict': {},
+                                           'intensity': 1.}]
+    
+        # first determine the most intense peaks (due to natural abundance)
+        # based on the formula of the ion (which is actually measured by the machine)
+        # as opposed to the compound
+        # The most intense peak is the M0 peak
+        for e, f in elements_ion.items():
+            element_abundances = self.natural_abundances[e]
+            for _ in range(f):
+                mass_isotopologue_distribution_temp1 = []
+                for mid in mass_isotopologue_distribution:
+                    formula_dict = mid['formula_dict']
+                    intensity = mid['intensity']
+                    for atom_num, _, fraction in element_abundances:
+                        new_formula_dict = copy.deepcopy(formula_dict)
+                        atom = '%s%s' % (e, atom_num)
+                        if atom in formula_dict:
+                            new_formula_dict[atom] += 1
+                        else:
+                            new_formula_dict[atom] = 1
+                        new_formula = list(new_formula_dict.items())
+                        new_formula.sort(key = lambda f: f[0])
+                        new_formula = str(new_formula)
+                        new_intensity = intensity * fraction / 100.
+                        #if not new_intensity > 0: continue
+                        if not new_intensity > 1e-5: continue
+                        mass_isotopologue_distribution_temp1.append({'formula': new_formula,
+                                                                     'formula_dict': new_formula_dict,
+                                                                     'intensity': new_intensity})
+                        
+                # now merge the items with the same formula
+                mass_isotopologue_distribution_temp2 = {}
+                for mid in mass_isotopologue_distribution_temp1:
+                    formula = mid['formula']
+                    intensity = mid['intensity']
+                    if formula in mass_isotopologue_distribution_temp2:
+                        mass_isotopologue_distribution_temp2[formula]['intensity'] += intensity
+                    else:
+                        mass_isotopologue_distribution_temp2[formula] = mid
+                
+                mass_isotopologue_distribution = list(mass_isotopologue_distribution_temp2.values())
+    
+        
+        # add mass and empty label to the distribution information
+        isotope_masses = {}
+        for e, e_info in self.natural_abundances.items():
+            for atom_num, isotope_mass, _ in e_info:
+                atom = '%s%s' % (e, atom_num)
+                isotope_masses[atom] = isotope_mass
+        for mid in mass_isotopologue_distribution:
+            compound_mass = 0.
+            for atom, amount in mid['formula_dict'].items():
+                compound_mass += isotope_masses[atom] * amount
+            mid['mass'] = compound_mass
+            mid['label'] = []
+    
+        # determine M0 species (highest intensity)
+        mass_isotopologue_distribution.sort(key = lambda x: x['intensity'], reverse = True)
+        M0_species = mass_isotopologue_distribution[0]
+        # parse the isotopes of the M0 species
+        parse_isotope_regex = re.compile(r'([^\d]+)(\d+)')
+        M0_isotopes = {}
+        for isotope in M0_species['formula_dict'].keys():
+            e, atom_num = parse_isotope_regex.findall(isotope)[0]
+            M0_isotopes[e] = atom_num
+    
+        # again put the isotopologue distribution in a formula based dictionary
+        mass_isotopologue_distribution_temp = {}
+        for mid in mass_isotopologue_distribution:
+            mass_isotopologue_distribution_temp[mid['formula']] = mid
+    
+    
+        # now add the missing focus isotopologue signals
+        for isotope_f in isotope_focus:
+            # parse the focus isotope (e.g.: 'C13' --> 'C' and '13')
+            e, atom_num = parse_isotope_regex.findall(isotope_f)[0]
+            # if this element does not appear in the M0 species, nothing needs to be done
+            if e not in M0_isotopes: continue
+            # if the focus isotope is identical to the corresponding M0 isotope,
+            # nothing needs to be done (e.g.: C12)
+            isotope_f_M0 = '%s%s' % (e, M0_isotopes[e])
+            if isotope_f == isotope_f_M0: continue
+    
+            # first add a M-1 signal (for verification during analysis)
+            label_mass_diff = isotope_masses[isotope_f] - isotope_masses[isotope_f_M0]
+            compound_mass = M0_species['mass'] - label_mass_diff
+            mid = {'formula': None,
+                   'formula_dict': None,
+                   'intensity': 0.,
+                   'mass': compound_mass,
+                   'label': ['%s_%s' % (isotope_f, -1)]}
+            mass_isotopologue_distribution_temp[isotope_f] = mid
+    
+            # check how many times this element appears in the formula of the compound
+            e_count = elements_compound[e]
+             
+            for e_i in range(e_count + 1):
+                # determine the formula_dict corresponding to this amount of focus isotope
+                formula_dict = copy.deepcopy(M0_species['formula_dict'])
+                # get the number of M0 focus elements in the compound formula
+                isotope_f_M0_count = formula_dict[isotope_f_M0]
+                # temporarily remove the M0 variant of the focus isotope
+                del formula_dict[isotope_f_M0]
+                # and now add the correct amounts
+                new_isotope_f_M0_count = isotope_f_M0_count - e_i
+                new_isotope_f_count = e_i
+                if new_isotope_f_M0_count > 0:
+                    formula_dict[isotope_f_M0] = new_isotope_f_M0_count
+                if new_isotope_f_count > 0:
+                    formula_dict[isotope_f] = new_isotope_f_count
+                # convert the formula dictionary to a formula
+                formula = list(formula_dict.items())
+                formula.sort(key = lambda f: f[0])
+                formula = str(formula)
+                
+                # check if this formula already appears in the temporary
+                # mass_isotopologue_distribution. If not it is added with intensity 0
+                if formula in mass_isotopologue_distribution_temp:
+                    mass_isotopologue_distribution_temp[formula]['label'].append('%s_%s' % (isotope_f, e_i))
+                else:
+                    compound_mass = 0.
+                    for atom, amount in formula_dict.items():
+                        compound_mass += isotope_masses[atom] * amount
+                    mid = {'formula': formula,
+                           'formula_dict': formula_dict,
+                           'intensity': 0.,
+                           'mass': compound_mass,
+                           'label': ['%s_%s' % (isotope_f, e_i)]}
+                    mass_isotopologue_distribution_temp[formula] = mid
+    
+        mass_isotopologue_distribution = list(mass_isotopologue_distribution_temp.values())
+        mass_isotopologue_distribution.sort(key = lambda x: x['mass'])
+        
+        return M0_species['mass'], mass_isotopologue_distribution
+
+
+    def merge_peaks(self,
+                    mass_isotopologue_distribution_info,
+                    mz_precision_rel,
+                    mz_precision_abs,
+                    isotope_focus = 'C13'):
+        """
+        Due to limited precision of the MS machine
+        some isotopologue signals might overlap when measured
+        This overlap is calculated here
+       
+        Args:
+            mass_isotopologue_distribution_info - Required : theoretical isotopologue profile (List)
+            mz_precision_rel - Required                    : relative mass error in ppm of the MS machine (Float)
+            mz_precision_abs - Required                    : absolute mass error in Da of the MS machine (Float)
+            isotope_focus - Optional                       : the isotope used as tracer (Str)
+                                                             (default: C13)
+        
+        Returns:
+            CM  : Fernandez1996 correction matrix (Numpy Array)
+        """
+        
+        # first determine the groups
+        previous_mass = float('-Inf')
+        mass_groups = []
+        tag_groups = []
+        for mid in mass_isotopologue_distribution_info:
+            # determine the tag
+            tag_num = None
+            for label in mid['label']:
+                if label.startswith(isotope_focus):
+                    tag_num = int(label.split('_')[1])
+                    break
+            # determine the mass difference
+            mass = mid['mass']
+            mass_diff_margin = max(mz_precision_abs,(mass * mz_precision_rel / 1000000.))
+            # start new group?
+            if mass - previous_mass > mass_diff_margin:
+                mass_groups.append([mass])
+                tag_groups.append([tag_num])
+            else:
+                mass_groups[-1].append(mass)
+                tag_groups[-1].append(tag_num)
+            # update previous mass
+            previous_mass = mass
+    
+        # link masses to tag_nums
+        tags = []
+        for tag_group in tag_groups:
+            while (len(tag_group) > 1) and (None in tag_group):
+                tag_group.remove(None)
+            tags.append(tag_group[0])
+        mass2tag = {}
+        for tag, masses in zip(tags, mass_groups):
+            for mass in masses:
+                mass2tag[mass] = tag
+    
+        # add the M level information to the isotopologue distribution
+        for mid in mass_isotopologue_distribution_info:
+            mid['M_level'] = mass2tag[mid['mass']]
+
+
+    def determine_multiplication_factor(self, formula_dict):
+        """
+        Calculating the total number of (different) permutations
+        from the given isotope composition
+    
+        Args:
+            formula_dict - Required : the molecular isotope composition (Dict)
+    
+        Returns:
+            num_unique_perms: number of (different) permutations
+        """
+        element_counts = {}
+        parse_isotope_regex = re.compile(r'([^\d]+)(\d+)')
+        for isotope, amount in formula_dict.items():
+            if amount == 0: continue
+            e, atom_num = parse_isotope_regex.findall(isotope)[0]
+            if e in element_counts:
+                element_counts[e].append(amount)
+            else:
+                element_counts[e] = [amount]
+             
+        multiplication_factor = 1
+        for counts in element_counts.values():
+            numerator = math.factorial(sum(counts))
+            denominator = 1
+            for c in counts:
+                denominator *= math.factorial(c)
+            multiplication_factor *= (numerator / denominator)
+    
+        return multiplication_factor
+
+
+    def generate_correction_matrix(self,
+                                   mass_isotopologue_distribution_info,
+                                   isotope_focus = 'C13'):
+        """
+        generate the Fernandez1996 correction matrix
+           
+        Args:
+            mass_isotopologue_distribution_info - Required : theoretical isotopologue profile (List)
+            isotope_focus - Optional                       : the isotope used as tracer (Str)
+                                                             (default: C13)
+        
+        Returns:
+            CM  : Fernandez1996 correction matrix (Numpy Array)
+        """
+    
+        parse_isotope_regex = re.compile(r'([^\d]+)(\d+)')
+    
+        # determine from the tags in the mass_isotopologue_distribution_info
+        # how many times the isotope_focus can appear
+        max_tag_num = 0
+        for mid in mass_isotopologue_distribution_info:
+            for label in mid['label']:
+                if label.startswith(isotope_focus):
+                    tag_num = int(label.split('_')[1])
+                    if tag_num > max_tag_num:
+                        max_tag_num = tag_num
+    
+        max_tag_num += 1
+        # and now fill the correction matrix
+        CM = numpy.full((max_tag_num, max_tag_num), 0.)
+        for mid in mass_isotopologue_distribution_info:
+            m_level = mid['M_level']
+            if m_level == None or m_level < 0:
+                # this signal does not make part of a signal of interest
+                # and is therefore not included in the correction matrix
+                continue
+            else:
+                column = m_level
+                formula_dict = mid['formula_dict']
+                if isotope_focus not in formula_dict:
+                    formula_dict[isotope_focus] = 0
+                tag_num = formula_dict[isotope_focus] + 1
+                for row in range(tag_num):
+                    f_dict = copy.deepcopy(formula_dict)
+                    f_dict[isotope_focus] -= row
+                    # mass increase is independent of the positions of
+                    # isotopes incorporation
+                    # the number of possibilities are therefore calculated 
+                    mult_factor = self.determine_multiplication_factor(f_dict)
+                    # calculate natural abundance intensity of matrix element
+                    intensity = 1.
+                    for isotope, amount in f_dict.items():
+                        # get the fraction of the isotope
+                        e, atom_num = parse_isotope_regex.findall(isotope)[0]
+                        atom_num = int(atom_num)
+                        element_abundances = self.natural_abundances[e]
+                        for an, _, fraction in element_abundances:
+                            if an == atom_num: break
+                        for _ in range(amount):
+                            intensity *= (fraction * 0.01)
+                    CM[row][column] += (intensity * mult_factor)
+    
+        return CM
+            
+
+    def Fernandez1996_correction(self,
+                                 isotopologue_profile,
+                                 molecular_formula_compound,
+                                 molecular_formula_ion,
+                                 mz_precision_rel,
+                                 mz_precision_abs,
+                                 isotope_focus = 'C13'):
+        """
+        Perform the Fernandez1996 correction.
+           
+        Args:
+            isotopologue_profile - Required        : isotopologue profile (List)
+            elemental_formula_compound - Required  : elemental formula of the metabolite (Str)
+            elemental_formula_ion - Required       : elemental formula of ion derived from
+                                                     the metabolite and measured by MS (Str)
+            mz_precision_rel - Required            : relative mass error in ppm of the MS machine (Float)
+            mz_precision_abs - Required            : absolute mass error in Da of the MS machine (Float)
+            isotope_focus - Optional               : the isotope used as tracer (Str)
+                                                     (default: C13)
+        
         Returns:
             corrected_isotopologue_profile  : corrected isotopologue profile (Numpy Array)
         """
-        
-        elements = self.parse_formula(elemental_formula)
-        CM_temp = []
-        counter = 0
-        elements['C'] += 1
-        while elements['C'] > 0:
-            elements['C'] -= 1
-            mass_isotopomer_distribution = [1]
-            for e,f in elements.items():
-                na_s = [(info[0],info[2]/100.) for info in self.natural_abundances[e]]
-                element_mass_distribution = []
-                prev_m = na_s[0][0] - 1
-                while na_s:
-                    m,a = na_s[0]
-                    if m == prev_m + 1:
-                        element_mass_distribution.append(a)
-                        na_s.pop(0)
-                    else:
-                        element_mass_distribution.append(0.)
-                    prev_m += 1
-                for _ in range(f):
-                    mass_isotopomer_distribution = numpy.convolve(mass_isotopomer_distribution,element_mass_distribution)
-            CM_temp.append(([0.]*counter) + list(mass_isotopomer_distribution))
-            counter += 1
     
-        # CM needs to be square
-        num_rows = len(CM_temp)
-        CM = [row[:num_rows] for row in CM_temp]
-        CM = numpy.array(CM)
+        # determine the theoretical isotopologue distribution
+        # for this ion with the signals relevant for the specific
+        # isotope focus tagged
+        _, mass_isotopologue_distribution_info = self.generate_m0mass_and_distribution(molecular_formula_compound,
+                                                                                       molecular_formula_ion,
+                                                                                       [isotope_focus])
     
-        # isotopologue_profile needs to be of the same dimension
-        if len(isotopologue_profile) < num_rows:
-            isotopologue_profile.extend([0.]*(num_rows-len(isotopologue_profile)))
-        elif len(isotopologue_profile) > num_rows:
-            isotopologue_profile = isotopologue_profile[:num_rows]
-        isotopologue_profile = numpy.array(isotopologue_profile)
+        # based on the technical limitation of the mass spectrometer
+        # some of the theoretical isotopologues might overlap with other
+        # this overlap is calculated here
+        self.merge_peaks(mass_isotopologue_distribution_info,
+                         mz_precision_rel,
+                         mz_precision_abs,
+                         isotope_focus)
     
-        return numpy.dot(isotopologue_profile,numpy.linalg.inv(CM))
+        # generate the correction matrix as described by the
+        # Fernandez 1996 paper:
+        # Correction of 13C Mass Isotopomer Distributions for Natural Stable Isotope Abundance
+        CM = self.generate_correction_matrix(mass_isotopologue_distribution_info,
+                                             isotope_focus)
+    
+        # make sure the input mass isotopologue distribution vector
+        # is of same dimension M as the correction matrix (MxM)
+        M = CM.shape[0]
+        mid_size = len(isotopologue_profile)
+        if mid_size < M:
+            # add trailing zeros
+            isotopologue_profile = isotopologue_profile + [0 for i in range(M - mid_size)]
+        elif mid_size > M:
+            # removing excess signals
+            isotopologue_profile = isotopologue_profile[:M]
+    
+        return numpy.dot(isotopologue_profile, numpy.linalg.inv(CM))
+
+
 
 
 class Deconvoluter():
@@ -1197,7 +1576,9 @@ def main():
     min_ROABM = arguments[6]
     HCS_max_missing_mass = arguments[7]
     HCS_confidence_level = arguments[8]
-    verbose = arguments[9]
+    mz_precision_rel = arguments[9]
+    mz_precision_abs = arguments[10]
+    verbose = arguments[11]
     
     # seeding the random number generator
     numpy.random.seed(random_seed)
@@ -1206,13 +1587,23 @@ def main():
     isotopologue_profile = parse_isotopologue_data(isotopologue_fn)
     
     # parsing the model file
-    m_name, m_formula, m_moieties, m_constraints = parse_model_data(model_fn)
+    model_info = parse_model_data(model_fn)
+    m_name = model_info[0]
+    m_compound_formula = model_info[1]
+    m_ion_formula = model_info[2]
+    m_moieties = model_info[3]
+    m_constraints = model_info[4]
 
     # if necessary (indicated by user), perform natural abundance correction
     if natural_abundance_correction:
         idc = IsotopomerDistributionCorrector()
-        corrected_isotopologue_profile = list(idc.Fernandez1996_correction(m_formula,
-                                                                           isotopologue_profile))
+        corrected_isotopologue_profile = list(idc.Fernandez1996_correction(isotopologue_profile,
+                                                                           m_compound_formula,
+                                                                           m_ion_formula,
+                                                                           mz_precision_rel,
+                                                                           mz_precision_abs,
+                                                                           isotope_focus = 'C13'))
+        
     else:
         corrected_isotopologue_profile = isotopologue_profile
 
@@ -1236,7 +1627,7 @@ def main():
 
     # initialize the deconvoluter
     deconv = Deconvoluter(m_name,
-                          m_formula,
+                          m_ion_formula,
                           m_moieties,
                           m_constraints,
                           normalized_pos_corrected_isotopologue_profile,
