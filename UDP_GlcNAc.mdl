@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<metabolite name="UDP-GlcNAc" formula="C17H27N3O17P2">
+<metabolite name="UDP-GlcNAc" compound_formula="C17H27N3O17P2" ion_formula="C17H26N3O17P2">
     <moietyList>
       <moiety id="g0">
         <name>glucose</name>
