@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<metabolite name="ATP" formula="C10H16N5O13P3">
+    <moietyList>
+      <moiety id="r0">
+        <name>ribose</name>
+        <position>r</position>
+        <numLabels>0</numLabels>
+      </moiety>
+      <moiety id="r5">
+        <name>ribose</name>
+        <position>r</position>
+        <numLabels>5</numLabels>
+      </moiety>
+      <moiety id="g0">
+        <name>glycine</name>
+        <position>g</position>
+        <numLabels>0</numLabels>
+      </moiety>
+      <moiety id="g2">
+        <name>glycine</name>
+        <position>g</position>
+        <numLabels>2</numLabels>
+      </moiety>
+      <moiety id="f10">
+        <name>formyl1</name>
+        <position>f1</position>
+        <numLabels>0</numLabels>
+      </moiety>
+      <moiety id="f11">
+        <name>formyl1</name>
+        <position>f1</position>
+        <numLabels>1</numLabels>
+      </moiety>
+      <moiety id="f20">
+        <name>formyl2</name>
+        <position>f2</position>
+        <numLabels>0</numLabels>
+      </moiety>
+      <moiety id="f21">
+        <name>formyl2</name>
+        <position>f2</position>
+        <numLabels>1</numLabels>
+      </moiety>
+    </moietyList>
+    
+    <constraintList>
+      <constraint>r0 + r5 = 1</constraint>
+      <constraint>g0 + g2 = 1</constraint>
+      <constraint>f10 + f11 = 1</constraint>
+      <constraint>f20 + f21 = 1</constraint>
+      <constraint>f10 = f20</constraint>
+      <constraint>f11 = f21</constraint>
+    </constraintList>
+        
+</metabolite>
