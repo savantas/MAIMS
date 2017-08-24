@@ -18,7 +18,7 @@ Running MAIMS
 ```
 * Example:
 ```
-	python MAIMS.py -m UDP_GlcNAc.mdl -f example_UDPGlcNAc_noncorrected_isotopologue.txt -n -v
+	python MAIMS.py -m UDP_GlcNAc.mdl -f example_UDPGlcNAc_noncorrected_isotopologue.txt -n -v --rel 10 --abs 0.002
 ```
 * For more information on how to run timeseries_plot.py, type:
 ```
