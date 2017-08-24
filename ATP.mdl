@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<metabolite name="ATP" formula="C10H16N5O13P3">
+<metabolite name="ATP" compound_formula="C10H16N5O13P3" ion_formula="C10H15N5O13P3">
     <moietyList>
       <moiety id="r0">
         <name>ribose</name>
