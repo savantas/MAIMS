@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<metabolite name="UDP-GlcNAc" formula="C17H27N3O17P2">
+    <moietyList>
+      <moiety id="g0">
+        <name>glucose</name>
+        <position>g</position>
+        <numLabels>0</numLabels>
+      </moiety>
+      <moiety id="g6">
+        <name>glucose</name>
+        <position>g</position>
+        <numLabels>6</numLabels>
+      </moiety>
+      <moiety id="r0">
+        <name>ribose</name>
+        <position>r</position>
+        <numLabels>0</numLabels>
+      </moiety>
+      <moiety id="r5">
+        <name>ribose</name>
+        <position>r</position>
+        <numLabels>5</numLabels>
+      </moiety>
+      <moiety id="a0">
+        <name>acetyl</name>
+        <position>a</position>
+        <numLabels>0</numLabels>
+      </moiety>
+      <moiety id="a2">
+        <name>acetyl</name>
+        <position>a</position>
+        <numLabels>2</numLabels>
+      </moiety>
+      <moiety id="u0">
+        <name>uracil</name>
+        <position>u</position>
+        <numLabels>0</numLabels>
+      </moiety>
+      <moiety id="u1">
+        <name>uracil</name>
+        <position>u</position>
+        <numLabels>1</numLabels>
+      </moiety>
+      <moiety id="u2">
+        <name>uracil</name>
+        <position>u</position>
+        <numLabels>2</numLabels>
+      </moiety>
+      <moiety id="u3">
+        <name>uracil</name>
+        <position>u</position>
+        <numLabels>3</numLabels>
+      </moiety>
+    </moietyList>
+    
+    <constraintList>
+      <constraint>g0 + g6 = 1</constraint>
+      <constraint>r0 + r5 = 1</constraint>
+      <constraint>a0 + a2 = 1</constraint>
+      <constraint>u0 + u1 + u2 + u3 = 1</constraint>
+    </constraintList>
+        
+</metabolite>
