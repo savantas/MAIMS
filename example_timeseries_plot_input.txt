@@ -1,0 +1,95 @@
+time = 0
+acetyl2  =   0.0%
+glucose6 =   0.0%
+ribose5  =   0.0%
+uracil1  =   0.0%
+uracil2  =   0.0%
+uracil3  =   0.0%
+####
+time = 0
+acetyl2  =   0.0%
+glucose6 =   0.0%
+ribose5  =   0.0%
+uracil1  =   0.0%
+uracil2  =   0.0%
+uracil3  =   0.0%
+####
+time = 6
+acetyl2  =   0.0%
+glucose6 =  70.5%
+ribose5  =  65.8%
+uracil1  =   2.2%
+uracil2  =  34.3%
+uracil3  =   0.0%
+####
+time = 6
+acetyl2  =   0.0%
+glucose6 =  71.5%
+ribose5  =  62.0%
+uracil1  =   3.8%
+uracil2  =  32.1%
+uracil3  =   0.0%
+####
+time = 12
+acetyl2  =   7.3%
+glucose6 =  82.9%
+ribose5  =  83.4%
+uracil1  =   9.0%
+uracil2  =  39.4%
+uracil3  =   3.0%
+####
+time = 12
+acetyl2  =   7.5%
+glucose6 =  82.7%
+ribose5  =  84.7%
+uracil1  =   7.6%
+uracil2  =  41.7%
+uracil3  =   3.2%
+####
+time = 24
+acetyl2  =  15.8%
+glucose6 =  87.8%
+ribose5  =  85.6%
+uracil1  =   9.7%
+uracil2  =  45.2%
+uracil3  =   6.1%
+####
+time = 24
+acetyl2  =  15.3%
+glucose6 =  87.9%
+ribose5  =  87.7%
+uracil1  =  10.0%
+uracil2  =  46.4%
+uracil3  =   6.2%
+####
+time = 36
+acetyl2  =  15.3%
+glucose6 =  91.7%
+ribose5  =  88.8%
+uracil1  =  10.4%
+uracil2  =  46.5%
+uracil3  =   6.8%
+####
+time = 36
+acetyl2  =  14.1%
+glucose6 =  90.3%
+ribose5  =  90.0%
+uracil1  =   9.5%
+uracil2  =  48.4%
+uracil3  =   7.3%
+####
+time = 48
+acetyl2  =  15.7%
+glucose6 =  91.6%
+ribose5  =  91.0%
+uracil1  =  10.5%
+uracil2  =  45.9%
+uracil3  =   6.2%
+####
+time = 48
+acetyl2  =  15.1%
+glucose6 =  91.0%
+ribose5  =  92.5%
+uracil1  =  10.2%
+uracil2  =  46.7%
+uracil3  =   6.8%
