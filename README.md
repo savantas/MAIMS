@@ -31,4 +31,6 @@ Running MAIMS
 
 Citing MAIMS
 ------------
-To be announced soon
+Verdegem, D., Moseley, H.N.B., Vermaelen, W. et al. Metabolomics (2017) 13: 123. https://doi.org/10.1007/s11306-017-1250-7
+
+https://link.springer.com/article/10.1007/s11306-017-1250-7
